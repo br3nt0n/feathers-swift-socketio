@@ -68,7 +68,7 @@ public final class SocketProvider: Provider {
 
     public func request(endpoint: Endpoint) -> SignalProducer<Response, AnyFeathersError> {
         let emitPath = endpoint.method.socketRequestPath
-        return emit(to: emitPath, with: [endpoint.path] + endpoint.method.socketData)
+        return emitQuery(to: emitPath, endpointPath: endpoint.path, with: endpoint.method.socketData)
     }
 
     public func authenticate(_ path: String, credentials: [String : Any]) -> SignalProducer<Response, AnyFeathersError> {
@@ -77,6 +77,41 @@ public final class SocketProvider: Provider {
 
     public func logout(path: String) -> SignalProducer<Response, AnyFeathersError> {
         return emit(to: "logout", with: [])
+    }
+    
+    private func emitQuery(to path: String, endpointPath: String, with data: SocketData) -> SignalProducer<Response, AnyFeathersError> {
+        return SignalProducer { [weak self] observer, disposable in
+            guard let vSelf = self else {
+                observer.sendInterrupted()
+                return
+            }
+            if vSelf.client.status == .connecting {
+                vSelf.client.once("connect") { _,_  in
+                    vSelf.client.emitWithAck(path, endpointPath, data).timingOut(after: vSelf.timeout) { data in
+                        let result = vSelf.handleResponseData(data: data)
+                        if let error = result.error {
+                            observer.send(error: error)
+                        } else if let response = result.value {
+                            observer.send(value: response)
+                        } else {
+                            observer.send(error: AnyFeathersError(FeathersNetworkError.unknown))
+                        }
+                    }
+                }
+            } else {
+                vSelf.client.emitWithAck(path, endpointPath, data).timingOut(after: vSelf.timeout) { data in
+                    let result = vSelf.handleResponseData(data: data)
+                    if let error = result.error {
+                        observer.send(error: error)
+                    } else if let response = result.value {
+                        observer.send(value: response)
+                    } else {
+                        observer.send(error: AnyFeathersError(FeathersNetworkError.unknown))
+                    }
+                }
+            }
+            
+        }
     }
 
     /// Emit data to a given path.

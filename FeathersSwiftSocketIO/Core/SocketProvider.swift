@@ -251,10 +251,10 @@ fileprivate extension Service.Method {
         }
     }
 
-    fileprivate var socketData: [SocketData?] {
+    fileprivate var socketData: SocketData {
         switch self {
         case .find(let query):
-            return [query?.serialize() ?? [:]]
+            return query?.serialize() ?? [:]
         case .get(let id, let query):
             return [id, query?.serialize() ?? [:]]
         case .create(let data, let query):
